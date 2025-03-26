@@ -1,3 +1,4 @@
+import { PrismaClient } from "@prisma/client";
 import cors, { CorsOptions } from "cors";
 import express from 'express';
 import jwt from "jsonwebtoken";
@@ -7,8 +8,10 @@ import authRoutes from "./Auth";
 import { createServerName } from "./dbRelated/createServerName";
 import { getUserServers } from "./dbRelated/getUserServers";
 import { joinServer } from "./dbRelated/joinServer";
+import { leaveServer } from "./dbRelated/leaveServer";
 import { saveMessageToDatabase } from "./dbRelated/saveMessageToDatabase";
 import { isAuthenticated } from "./isAuthenticated";
+import { isSameUser } from "./isSameUser";
 import { User } from "./models/models";
 import { cacheMessage, getRecentMessages, loadOlderMessages } from "./redis/messageCaching";
 
@@ -20,7 +23,12 @@ declare module 'socket.io' {
   }
 }
 
+const globalForPrisma = global as unknown as { prisma?: PrismaClient };
+
+export const prisma = globalForPrisma.prisma || new PrismaClient();
+
 const activeSockets:Record<string,User> = {};
+const activeSocketsChannel:Record<string,User[]> = {};
 const JWT_SECRET = 'your_jwt_secret_key';
 
 const app = express();
@@ -32,8 +40,9 @@ const corsOptions: CorsOptions = {
   origin: allowedOrigins, // Allow requests from your frontend
   credentials: true, // Allow cookies to be sent
 };
-app.use(express.json());
 app.use(cors(corsOptions));
+app.use(express.json());
+
 
 const server = createServer(app);
 app.use(authRoutes);
@@ -77,13 +86,13 @@ io.use((socket:Socket, next) => {
 io.on("connection",(socket)=>{
 
     console.log('new user connected ',socket.id, socket.user?.name);
-    io.emit('activeSockets',{activeSockets:activeSockets});
+    // io.emit('activeSockets',{activeSockets:activeSockets});
     // Welcome message to the new client
     socket.emit('welcome', { message: `Welcome! ${socket.user?.name} Your ID is ${socket.id}`,timestamp:new Date(Date.now()) });
 
     
     // Broadcast to all clients except the one connecting
-    socket.broadcast.emit('newUser', { message: `User ${socket.id} has joined` ,timestamp:new Date(Date.now())});
+    // socket.broadcast.emit('newUser', { message: `User ${socket.id} has joined` ,timestamp:new Date(Date.now())});
     
     // Handle messages from client
     socket.on('message', (data) => {
@@ -92,6 +101,18 @@ io.on("connection",(socket)=>{
 
     // When a message is sent to a channel
     socket.on('sendMessage', async (serverId:string, channelId:number, message:string) => {
+      console.log("serverID: ",serverId)
+      const isMember = await prisma.serverMember.findUnique({
+        where:{
+          serverId_userId:{
+            serverId:Number(serverId),
+            userId:socket.user?.id!
+          }
+        }
+      });
+      if (isMember)
+      {
+        console.log("isMember: ",isMember);
       console.log("SEND MESSAGE: ",serverId,channelId,message)
       const roomName = `server:${serverId}:channel:${channelId}`;
       const messageObj = {
@@ -110,6 +131,11 @@ io.on("connection",(socket)=>{
       Promise.all([await saveMessageToDatabase(messageObj),await cacheMessage(channelId, messageObj)]).catch(error=>{
         console.log(error);
       })
+      }
+      else{
+        socket.emit('error',{message:'You are not a member of this server!'})
+      }
+      
 
     });
 
@@ -129,15 +155,56 @@ io.on("connection",(socket)=>{
       const currentRooms = Array.from(socket.rooms);
       currentRooms.forEach((room)=>{
         socket.leave(room);
+        io.to(room).emit('userLeft', { message: `User ${socket.user?.name} has swaped channel` ,timestamp:new Date(Date.now())});
       })
       // Join the new channel room
       const roomName = `default-${channelId}`;
+      socket.to(roomName).emit('newUser', { message: `User ${socket.user?.name} has joined` ,timestamp:new Date(Date.now())});
       socket.join(roomName);
+      
 
       console.log("Rooms from joinChannel: ",socket.rooms.keys());
-      
+
+      const clients = io.sockets.adapter.rooms.get(roomName);
+      for (const clientId of clients! ) {
+
+        //this is the socket of each client in the room.
+        const clientSocket = io.sockets.sockets.get(clientId);
+
+        if (!activeSocketsChannel[channelId]) {
+        activeSocketsChannel[channelId] = [];
+        }
+
+        Object.keys(activeSocketsChannel).forEach((channelId)=>{
+          activeSocketsChannel[channelId] = activeSocketsChannel[channelId].filter((user)=> user.id !== clientSocket?.user?.id)
+        })
+
+        const duplicate = activeSocketsChannel[channelId].some((sock)=>{
+        return sock.id == clientSocket?.user?.id
+        })
+
+        if(!duplicate && clientSocket?.user)
+        {
+          activeSocketsChannel[channelId].push(clientSocket.user);
+          io.emit('activeSocketsChannel', {activeSocketsChannel});
+          // console.log("from socketChann: ", activeSocketsChannel)
+        }
+        else{
+          io.emit('activeSocketsChannel', {activeSocketsChannel});
+        }
+        
+        
+        // console.log("client socket: ",clientSocket?.user);
+   
+   }
+      //io.emit('activeSocketsChannel', currentSockets);
       // Get recent messages from Redis
       const recentMessages = await getRecentMessages(channelId,50);
+      if(recentMessages.length<1)
+      {
+        const loadOlderMsg = await loadOlderMessages(channelId,new Date(),50);
+        socket.emit('gotOlderMessages',loadOlderMsg);
+      }
       socket.emit('recentMessages', recentMessages);
     });
 
@@ -145,10 +212,20 @@ io.on("connection",(socket)=>{
 
      // Handle client disconnection
     socket.on('disconnect', () => {
-        console.log('Client disconnected:', socket.id);
+        // console.log('Client disconnected:', socket.id);
         delete activeSockets[socket.id]
+        const currentRooms = Array.from(socket.rooms);
+        currentRooms.forEach((room)=>{
+          io.to(room).emit('userLeft', { message: `User ${socket.user?.name} has disconnected` ,timestamp:new Date(Date.now())});
+          socket.leave(room);
+        })
+        
+        Object.keys(activeSocketsChannel).forEach((channelId)=>{
+          activeSocketsChannel[channelId] = activeSocketsChannel[channelId].filter((user)=> user.id != Number(socket.user?.id))
+        })
+        // console.log("Active sockets: ",activeSocketsChannel);
         io.emit('activeSockets',{activeSockets});
-        io.emit('userLeft', { message: `User ${socket.id} has left` ,timestamp:new Date(Date.now())});
+        io.emit('activeSocketsChannel',{activeSocketsChannel});
 });
 });
 
@@ -177,6 +254,26 @@ app.post('/join-server',isAuthenticated,async(req,res)=>{
     }
     else{
       res.status(200).json(joinServerResponse);
+    }
+    
+  }catch(error){
+    console.log(error);
+    res.status(500).json(error)
+  }
+})
+
+app.post('/leave-server',isAuthenticated, isSameUser,async(req,res)=>{
+  // console.log("Req body: ",req.body)
+  const {user,serverId} = req.body;
+  try{
+    const leaveServerResponse = await leaveServer(user,serverId);
+    console.log("LeaveserverResponse: ",leaveServerResponse);
+    if (leaveServerResponse instanceof Error)
+    {
+      res.status(400).send({message:leaveServerResponse.message});
+    }
+    else{
+      res.status(200).json(leaveServerResponse);
     }
     
   }catch(error){

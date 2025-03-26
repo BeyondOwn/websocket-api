@@ -1,8 +1,8 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "..";
 import { User } from "../models/models";
 
 export async function joinServer(user:User,inviteCode:string){
-    const prisma = new PrismaClient();
+
 
     const serverWithInviteCode = await prisma.server.findUnique({
         where:{

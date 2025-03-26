@@ -14,11 +14,13 @@ datasource db {
 }
 
 model User {
-  id       Int    @id @default(autoincrement())
-  googleId String
-  name     String
-  email    String @unique
-  picture  String
+  id           Int     @id @default(autoincrement())
+  googleId     String
+  name         String
+  email        String  @unique
+  picture      String  @default("user.png")
+  password     String?
+  isGoogleUser Boolean @default(false)
 
   ownedServer     Server[]       @relation("ServerOwner")
   memberOfServers ServerMember[]
@@ -36,7 +38,7 @@ model Server {
 
   // Relations
   ownerId  Int
-  owner    User           @relation("ServerOwner", fields: [ownerId], references: [id])
+  owner    User           @relation("ServerOwner", fields: [ownerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   members  ServerMember[]
   channels Channel[]
 }

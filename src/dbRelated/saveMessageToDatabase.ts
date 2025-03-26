@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client"
+import { prisma } from ".."
 
 interface User {
     id: number
@@ -18,7 +18,6 @@ interface User {
   }
 export const saveMessageToDatabase = async(messageObj:Message)=>{
     console.log(messageObj);
-    const prisma = new PrismaClient();
     try{
         const message = await prisma.message.create({
             data:{

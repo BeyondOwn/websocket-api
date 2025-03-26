@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 const JWT_SECRET = 'your_jwt_secret_key'; // In production, use environment variable
 
 // Define a custom interface to extend Request
-interface AuthenticatedRequest extends Request {
+export interface AuthenticatedRequest extends Request {
     user?: jwt.JwtPayload | string;
 }
 
@@ -23,6 +23,7 @@ export const isAuthenticated = (
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         req.user = decoded;
+        console.log("User from isAuth: ",req.user);
         next();
     } catch (error) {
         res.status(401).json({ message: 'Invalid token' });

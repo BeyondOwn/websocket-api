@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "..";
 
 export async function generateInviteCodeFromServerId(serverId:string) {
     // Convert serverId to base36 for shorter representation
@@ -19,7 +19,6 @@ export const createServerName = async (name:string,ownerId:number,
     
     if(name.length <2) return Error("Server name length should be longer than 2 characters")
 
-    const prisma = new PrismaClient();
     const inviteCodeGenerated = await generateInviteCodeFromServerId(name);
 
     try{

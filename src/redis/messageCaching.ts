@@ -1,5 +1,5 @@
 // messageCache.ts
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '..';
 import { redisClient } from './redis';
 
 interface User {
@@ -47,7 +47,7 @@ async function fetchMessagesFromDB(channelId: number, olderThan: Date, limit: nu
   // Implement your database query here
   // Example with Prisma:
   console.log("FetchFromDb");
-  const prisma = new PrismaClient();
+
   const messages = await prisma.message.findMany({
     where: {
       channelId: channelId,
