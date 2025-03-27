@@ -23,6 +23,7 @@ declare module 'socket.io' {
   }
 }
 
+console.log('Database URL:', process.env.DATABASE_URL);
 const globalForPrisma = global as unknown as { prisma?: PrismaClient };
 
 export const prisma = globalForPrisma.prisma || new PrismaClient();
