@@ -5,7 +5,7 @@ import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { prisma } from ".";
 
-export const CALLBACK_URL = 'http://localhost:3000/auth/google/callback'
+export const CALLBACK_URL = 'https://websocket-api-production.up.railway.app/auth/google/callback'
 export const FRONTEND = 'http://localhost:5173'
 
 declare namespace Express {
