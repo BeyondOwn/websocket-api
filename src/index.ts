@@ -34,7 +34,7 @@ const JWT_SECRET = 'your_jwt_secret_key';
 
 const app = express();
 
-const allowedOrigins = ['https://localhost:3000','http://localhost:3000', 'http://localhost:8081','http://localhost:5173'];
+const allowedOrigins = ['https://vue-websocket-one.vercel.app','https://localhost:3000','http://localhost:3000', 'http://localhost:8081','http://localhost:5173'];
 
 // Define CORS options
 const corsOptions = {
@@ -60,7 +60,7 @@ app.use(authRoutes);
 
 const io = new Server(server,{
     cors:{
-    origin: "http://localhost:5173", // Vue dev server address
+    origin: "https://vue-websocket-one.vercel.app", // Vue dev server address
     methods: ["GET", "POST"],
     credentials: true
     }
