@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import cors, { CorsOptions } from "cors";
+import cors from "cors";
 import express from 'express';
 import jwt from "jsonwebtoken";
 import { createServer } from 'node:http';
@@ -37,11 +37,20 @@ const app = express();
 const allowedOrigins = ['https://localhost:3000','http://localhost:3000', 'http://localhost:8081','http://localhost:5173'];
 
 // Define CORS options
-const corsOptions: CorsOptions = {
-  origin: allowedOrigins, // Allow requests from your frontend
-  credentials: true, // Allow cookies to be sent
+const corsOptions = {
+  origin: function (origin:any, callback:any) {
+    console.log('Request from origin:', origin);
+    if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
+      callback(null, true);
+    } else {
+      console.log('Origin not allowed by CORS:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
 };
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json());
 
 
