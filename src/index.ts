@@ -29,7 +29,7 @@ declare module 'socket.io' {
 }
 
 
-export const BACKEND = 'http://localhost:3000'
+
 console.log('Database URL:', process.env.DATABASE_URL);
 const globalForPrisma = global as unknown as { prisma?: PrismaClient };
 
