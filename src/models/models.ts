@@ -10,8 +10,15 @@ export interface User {
     id: number;
     content: string;
     createdAt: Date;
+    edited: boolean;
+    editedAt?:Date;
     userId: number;
     channelId: number;
     user?: User;
   }
+
+  export type UrlData = {
+    link: string;
+    isImage: boolean;
+  };
 

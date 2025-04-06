@@ -1,4 +1,5 @@
 // messageCache.ts
+import { JsonValue } from '@prisma/client/runtime/library';
 import { prisma } from '..';
 import { redisClient } from './redis';
 
@@ -11,11 +12,15 @@ interface User {
 }
 
 interface Message {
+  id:string,
   content: string;
+  links?: JsonValue[]
   createdAt: Date;
   userId: number;
   channelId: number;
   user?: User;
+  edited:Boolean;
+  editedAt:Date|null;
 }
 
 // Load messages older than the oldest cached message
@@ -83,6 +88,79 @@ async function cacheMessage(channelId: number | string, message: Message): Promi
   await redisClient.expire(key, 86400);
 }
 
+
+async function editMessageFromCache(channelId: number | string, messageId: number | string, newContent: string): Promise<boolean> {
+  const key = getChannelMessagesKey(channelId);
+  
+  // Get all messages from this channel
+  const messages = await redisClient.zrange(key, 0, -1);
+  console.log("Redis messages: ", messages);
+  
+  // Find the message with the matching ID
+  for (const messageStr of messages) {
+    try {
+      const message = JSON.parse(messageStr);
+      
+      if (message.id == messageId) {
+        // Get the score of the current message (likely a timestamp)
+        const score = await redisClient.zscore(key, messageStr);
+        
+        if (score === null) {
+          console.error("Message found but couldn't get its score");
+          return false;
+        }
+        
+        // Create the updated message with new content
+        const updatedMessage = {
+          ...message,
+          content: newContent,
+          edited: true,
+          editedAt: Date.now()
+        };
+        
+        // Convert to string for storage
+        const updatedMessageStr = JSON.stringify(updatedMessage);
+        
+        // Remove the old message
+        await redisClient.zrem(key, messageStr);
+        
+        // Add the updated message with the same score to maintain order
+        await redisClient.zadd(key, parseFloat(score), updatedMessageStr );
+        
+        return true;
+      }
+    } catch (error) {
+      console.error("Error parsing message:", error);
+      continue;
+    }
+  }
+  
+  return false;
+}
+
+// Function to delete a specific message from Redis cache
+async function deleteMessageFromCache(channelId: number | string, messageId: number | string): Promise<boolean> {
+  const key = getChannelMessagesKey(channelId);
+  
+  // Get all messages from this channel
+  const messages = await redisClient.zrange(key, 0, -1);
+  console.log("Redis messages: ",messages)
+  
+  // Find the message with the matching ID
+  for (const messageStr of messages) {
+    const message = JSON.parse(messageStr);
+    
+    if (message.id == messageId) {
+      // console.log("Found one: ",message);
+      // Remove this specific message from the sorted set
+      const removed = await redisClient.zrem(key, messageStr);
+      return removed > 0;
+    }
+  }
+  
+  return false;
+}
+
 // Get recent messages from Redis
 async function getRecentMessages(channelId: number | string, limit: number = 50): Promise<Message[]> {
   const key = getChannelMessagesKey(channelId);
@@ -103,8 +181,7 @@ async function hasCachedMessages(channelId: number | string): Promise<boolean> {
 }
 
 export {
-  cacheMessage,
-  getRecentMessages,
+  cacheMessage, deleteMessageFromCache, editMessageFromCache, getRecentMessages,
   hasCachedMessages,
   type Message
 };

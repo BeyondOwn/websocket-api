@@ -41,6 +41,7 @@ model Server {
   owner    User           @relation("ServerOwner", fields: [ownerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   members  ServerMember[]
   channels Channel[]
+  messages Message[]
 }
 
 model Channel {
@@ -71,13 +72,18 @@ model ServerMember {
 }
 
 model Message {
-  id        Int      @id @default(autoincrement())
+  id        String    @id @unique
   content   String
-  createdAt DateTime @default(now())
+  links     Json[]    @default([])
+  createdAt DateTime  @default(now())
+  edited    Boolean   @default(false)
+  editedAt  DateTime?
 
   // Relations
+  serverId  Int
+  server    Server  @relation(fields: [serverId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   userId    Int
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   channelId Int
-  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
